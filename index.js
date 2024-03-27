@@ -5,7 +5,7 @@ const hotelRouter = require('./routes/hotels');
 const airportRouter = require('./routes/airports');
 const attractionRouter = require('./routes/attractions'); 
 const flightRouter = require('./routes/flights'); 
-require("dotenv").config();
+require("dotenv").config({path: "./env.env"});
 
 const app = express();
 const PORT = process.env.PORT || 3000;
