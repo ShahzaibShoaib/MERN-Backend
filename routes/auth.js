@@ -1,149 +1,107 @@
-const express = require('express');
-const bcrypt = require('bcrypt');
-const jwt = require('jsonwebtoken');
-const Users = require('../model/User');
-const router = express.Router();
-const { OAuth2Client } = require('google-auth-library');
-const client = new OAuth2Client(process.env.OAuth); 
-const axios = require('axios');
-require("dotenv").config();
-CLIENT_ID=process.env.OAuth;
+const bcrypt = require("bcrypt");
+const Users = require("../model/User");
+var express = require("express");
+var router = express.Router();
+const jwt = require("jsonwebtoken")
+const {body, validationResult} = require("express-validator");
+var fetchuser = require('../middleware/fetchuser');
 
-router.post('/signup', async (req, res) => {
-    try {
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/; // copied from stack overflow
-        const { email, password, firstname, lastname, role } = req.body;
+const JWT_SECRET = "P0WER";
 
+router.post("/signup", [
+    //this is to check that the fields should not be left empty and if they are valid
+    body('name', 'Enter a valid name').isLength({min: 3}),
+    body('email', 'Enter a valid email').isEmail(),
+    body('password', 'Password must be atleast 5 characters').isLength({min: 5})
+], async (req, res) => {
+    //If there are errors, return the error and print the message
+    const errors = validationResult(req);
+    if(!errors.isEmpty()){
+        return res.status(400).json({errors: errors.array()})
+    }
 
+    try{
+    const {name, email, password, admin, recipe} = req.body;
+    //This is to check whether the user has a unique email
+    let user = await Users.findOne({email: req.body.email});
+    if(user){
+        return res.status(400).json({error: 'This user already exists'})
+    }
+    //This is to provide the user details
+    user = await Users.create({
+        name,
+        email,
+        password: await bcrypt.hash(password, 5),
+        admin,
+        recipe        
+    })
+    res.json(user);
 
-        let user = await Users.findOne({ email });
-        if (user) return res.json({ msg: 'User exists' });
-        if (email.length < 3) return res.json({ msg: 'Email too small' });
-        if (!emailRegex.test(email)) return res.json({ msg: 'Invalid email format' });
-        if (password.length < 8) return res.json({ msg: 'Password too small' });
-        if (role != "owner" && role != "user") return res.json({msg: "Invalid user role"});
-
-        await Users.create({ email, password: await bcrypt.hash(password, 5), role, firstname, lastname, });
-
-        return res.json({ msg: 'User Created' });
-    } catch (error) {
+    }
+    catch(error){
         console.error(error);
-        res.status(500).json({ error: 'Internal Server Error' });
     }
 });
 
-router.post('/login', async (req, res) => {
-    try {
-        const { email, password } = req.body;
-        
-        const user = await Users.findOne({ email });
-        if (!user) return res.json({ msg: "User doesn't exist" });
-
-        const passwordCheck = await bcrypt.compare(password, user.password);
-        if (!passwordCheck) return res.json({ msg: "Invalid password" });
-
-        const tokenPayload = {
-            email,    
-            role: user.role,
-            firstname: user.firstname,
-            lastname: user.lastname
-        };
-
-        const token = jwt.sign(tokenPayload, "Secret123", { expiresIn: "1d" });
-
-        res.json({
-            msg: "Logged in", 
-            token,
-            role: user.role,
-            firstname: user.firstname,
-            lastname: user.lastname
-        });
-
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ error: 'Internal Server Error' });
+router.post('/login', [
+    body('email', 'Enter a valid email').isEmail(),
+    body('password', 'Password cannot be blank').exists(),
+  ], async (req, res) => {
+    // If there are errors, return Bad request and the errors
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
     }
-});
-
-router.post('/google-login', async (req, res) => {
+  
+    const { email, password } = req.body;
     try {
-        const { tokenId } = req.body;
-        const response = await client.verifyIdToken({ idToken: tokenId, audience: CLIENT_ID });
-        const { email_verified, email, given_name, family_name } = response.payload;
+      const user = await Users.findOne({ email });
+      if (!user) {
+        return res.status(400).json({ error: "Please try to login with correct credentials" });
+      }
+  
+      const passwordCompare = await bcrypt.compare(password, user.password);
+      if (!passwordCompare) {
+        return res.status(400).json({ error: "Please try to login with correct credentials" });
+      }
+  
+      const tokenPayload = {
+        email,    
+        admin: user.admin,
+        name: user.name
+    };
 
-        if (email_verified) {
-            const user = await Users.findOne({ email });
-            if (user) {
-                const tokenPayload = {
-                    email,
-                    role: user.role,
-                    firstname: given_name || '', // Use given_name from Google Auth, or an empty string if not provided
-                    lastname: family_name || '' // Use family_name from Google Auth, or an empty string if not provided
-                };
+    const token = jwt.sign(tokenPayload, "P0WER", { expiresIn: "1d" });
 
-                const token = jwt.sign(tokenPayload, "Secret123", { expiresIn: "1d" });
-                return res.json({ msg: "Logged in", token });
-            } else {
-                await Users.create({ email });
-                const tokenPayload = {
-                    email,
-                    role: 'User', // Default role for new users
-                    firstname: given_name || '', // Use given_name from Google Auth, or an empty string if not provided
-                    lastname: family_name || '' // Use family_name from Google Auth, or an empty string if not provided
-                };
-
-                const token = jwt.sign(tokenPayload, "Secret123", { expiresIn: "1d" });
-                return res.json({ msg: "User registered and logged in", token });
-            }
-        } else {
-            return res.json({ msg: "Email not verified" });
-        }
+    res.json({
+        msg: "Logged in", 
+        token,
+        name: user.name,
+        admin: user.admin,
+        recipe: user.recipe
+    });
+  
     } catch (error) {
-        console.error(error);
-        res.status(500).json({ error: 'Internal Server Error' });
+      console.error(error);
     }
-});
+  
+  
+  });
 
 
-router.post('/facebook-login', async (req, res) => {
+  router.post('/fetchuser', fetchuser,  async (req, res) => {
+
     try {
-        const { accessToken, userID } = req.body;
-        const response = await axios.get(`https://graph.facebook.com/v13.0/${userID}?fields=id,email,first_name,last_name&access_token=${accessToken}`);
-
-        const { id, email, first_name, last_name } = response.data;
-
-        if (id) {
-            const user = await Users.findOne({ email });
-            if (user) {
-                const tokenPayload = {
-                    email,
-                    role: user.role,
-                    firstname: first_name || '', // Use first_name from Facebook Auth, or an empty string if not provided
-                    lastname: last_name || '' // Use last_name from Facebook Auth, or an empty string if not provided
-                };
-
-                const token = jwt.sign(tokenPayload, "Secret123", { expiresIn: "1d" });
-                return res.json({ msg: "Logged in", token });
-            } else {
-                await Users.create({ email });
-                const tokenPayload = {
-                    email,
-                    role: 'User', // Default role for new users
-                    firstname: first_name || '', // Use first_name from Facebook Auth, or an empty string if not provided
-                    lastname: last_name || '' // Use last_name from Facebook Auth, or an empty string if not provided
-                };
-
-                const token = jwt.sign(tokenPayload, "Secret123", { expiresIn: "1d" });
-                return res.json({ msg: "User registered and logged in", token });
-            }
-        } else {
-            return res.json({ msg: "Invalid access token or user ID" });
-        }
+      userId = req.user.id;
+      const user = await Users.findById(userId).select("-password")
+      res.send(user)
     } catch (error) {
-        console.error(error);
-        res.status(500).json({ error: 'Internal Server Error' });
+      console.error(error.message);
+      res.status(500).send("Internal Server Error");
     }
-});
+  });
 
 
-module.exports = router;
+
+
+module.exports = router
