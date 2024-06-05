@@ -236,9 +236,9 @@ router.post("/delete", verifyToken, async (req, res) => {
 
 router.post("/update", verifyToken, async (req, res) => {
   try {
-    const { hotel_name, continent, country_name, city_name, no_rooms, rating, price, review_count, facilities, days_available } = req.body;
+    const { hotel_name, continent, country_name, city_name, no_rooms, rating, price, review_count, facilities, days_available, _id } = req.body;
     const user = await Users.findOne({ "email": req.user.email });
-    const hotel = await Hotels.findOne({ "hotel_name": hotel_name, "city_name": city_name });
+    const hotel = await Hotels.findOne({ "_id": _id});
     console.log("user: " + user.email + "\n" + "owner: " + hotel.owner);
     if (hotel.owner != user.email)
       return res.status(401).json({ msg: "Unauthorized Access" });
@@ -249,7 +249,7 @@ router.post("/update", verifyToken, async (req, res) => {
     const owner = user.email;
 
     const updateResult = await Hotels.updateOne(
-      { "hotel_name": hotel_name, "city_name": city_name }, // search criteria
+      { "_id": _id }, // search criteria
       {
         "hotel_name": hotel_name,
         "continent": continent,
@@ -266,13 +266,8 @@ router.post("/update", verifyToken, async (req, res) => {
 
       });
 
-    if (updateResult.modifiedCount === 1) {
-      // Update successful, send response
-      res.status(200).json({ msg: "Hotel deleted successfully" });
-    } else {
-      // Update failed, send error
-      res.status(400).json({ msg: "Failed to delete hotel" });
-    }
+      res.status(200).json({ msg: "Hotel Updated successfully" });
+  
 
   }
   catch (error) {

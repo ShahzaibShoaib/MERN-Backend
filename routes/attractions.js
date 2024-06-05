@@ -230,7 +230,9 @@ router.post("/delete", verifyToken, async (req, res) => {
 
 router.post("/update", verifyToken, async (req, res) => {
   try {
-    const { name,
+    const {
+      _id,
+       name,
       city,
       type,
       description,
@@ -242,8 +244,10 @@ router.post("/update", verifyToken, async (req, res) => {
       priceRange,
     } = req.body;
     const user = await Users.findOne({ "email": req.user.email });
-    const attraction = await Attractions.findOne({ "name": name, "city": city });
-    if (attraction.owner.email != user.email)
+    const attraction = await Attractions.findOne({ "_id": _id });
+    console.log(attraction.owner);
+    
+    if (attraction.owner != user.email)
       return res.status(401).json({ msg: "Unauthorized Access" });
 
     const owner = req.user.email
@@ -252,7 +256,9 @@ router.post("/update", verifyToken, async (req, res) => {
     let updation_time = new Date();
     updation_time = updation_time.toISOString().slice(0, 19).replace('T', ' ');
 
-    await Attractions.updateOne({ "name": name, "city": city }), {
+    await Attractions.updateOne({ "_id": _id }, {
+      "name": name,
+      "city": city,
       "type": type,
       "description": description,
       "phone": phone,
@@ -263,7 +269,7 @@ router.post("/update", verifyToken, async (req, res) => {
       "priceRange": priceRange,
       "updation_time": updation_time,
       "updated_by": owner
-    };
+    });
   }
   catch (error) {
     console.error(error);
